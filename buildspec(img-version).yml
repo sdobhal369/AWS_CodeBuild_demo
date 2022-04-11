@@ -1,0 +1,40 @@
+version: 0.2
+
+phases:
+  
+  install:
+    runtime-versions:
+      nodejs: 14
+    commands:
+      - echo Downloading gitversion tool...
+      - wget -q -O gitversion https://github.com/screwdriver-cd/gitversion/releases/download/v1.1.6/gitversion_linux_amd64
+      - chmod 777 gitversion
+      - ./gitversion --version
+  
+  pre_build:
+    commands:
+      - echo Versioning Docker image...
+      - ./gitversion bump auto > version-git.txt
+      - export SEMVER=$(cat version-git.txt)
+      - echo $SEMVER
+      - git push https://Nodejs-at-295561619416:$AWS_PAT@git-codecommit.us-east-2.amazonaws.com/v1/repos/SampleNode-ChatApp --tags
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - export SEMVER=$(cat version-git.txt)
+      - echo $SEMVER
+      - echo Building the Docker image...          
+      - docker build -t $IMAGE_REPO_NAME:$SEMVER .    
+  
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo Pushing the Docker image...
+      - docker push $IMAGE_REPO_NAME:$SEMVER
+      - printf '[{ "name":"%s", "imageUri":"%s"}]' $CONTAINER_NAME $IMAGE_REPO_NAME:$SEMVER > imagedefinitions.json
+      
+artifacts:
+  files: imagedefinitions.json
